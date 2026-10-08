@@ -4,7 +4,7 @@ Every BUCK listens on two public relays at once and reports what it is doing on 
 
 ## Two doors, one deer
 
-[CLASP](https://clasp.to) is a signal routing protocol: clients connect to a relay, publish to addresses that look like `/a/b/c`, and subscribe to patterns. BUCK keeps two CLASP connections open:
+[CLASP](https://clasp.to) is a signal routing protocol: clients connect to a relay, publish to addresses that look like `/a/b/c`, and subscribe to patterns. BUCK keeps two connections open, one to each of two CLASP relays:
 
 | door | relay | who it is for |
 |---|---|---|
@@ -56,7 +56,7 @@ curl -d "robot" mqtt://relay.clasp.chat/hackbuild/buck/heatsync/voice
 ### What BUCK does with your text
 
 1. Cleans it: curly quotes become straight ones, emoji and other non-ASCII become spaces, whitespace collapses.
-2. Cuts it to 200 characters.
+2. Cuts it to 200 characters. Over MQTT any length is accepted and cut; over CLASP a frame larger than 2 KB is ignored.
 3. Checks the rate limit: a bucket of four messages, refilled at one every three seconds, shared by everyone on both doors.
 4. Checks the queue: at most four network messages wait at once.
 5. Speaks it, after whatever is already queued.
@@ -76,15 +76,17 @@ BUCK publishes these whenever they change. On relay.clasp.to they are CLASP para
 | `status/said` | string | the line it started speaking most recently |
 | `status/info` | string, JSON | refreshed every 60 s, see below |
 | `status/jaw` | float 0 to 1, CLASP stream | jaw openness about 15 times a second while talking, then a final 0. Not stored, CLASP only |
+| `status/beat` | int (CLASP) or text (MQTT) | BUCK's heartbeat, every 45 s: seconds since boot. See "staying subscribed" below |
 
 `info` looks like this:
 
 ```json
-{"fw":"1.0.0","id":"heatsync","up":3600,"heap":94816,"minHeap":74560,"rssi":-54,
- "reset":"power","crashes":0,"queue":0,"heard":42,"limited":3,"voice":"sam"}
+{"fw":"1.1.0","id":"heatsync","up":3600,"heap":94816,"minHeap":74560,"rssi":-54,
+ "reset":"power","crashes":0,"queue":0,"heard":42,"limited":3,"voice":"sam",
+ "clasp":"ready","mqtt":"ready"}
 ```
 
-`up` is seconds since boot. `reset` is why it last booted: `power`, `restart`, `usb`, `brownout`, `panic`, `task-wdt`, and a few rarer ones. `heard` and `limited` count network messages since boot.
+`up` is seconds since boot. `clasp` and `mqtt` are the state of each link: `ready`, `handshake`, `waiting` (backing off before a retry), or `off`. `reset` is why it last booted: `power`, `restart`, `usb`, `brownout`, `panic`, `task-wdt`, and a few rarer ones. `heard` and `limited` count network messages since boot.
 
 Watch status:
 
@@ -132,6 +134,19 @@ Then an event with a string value:
 The relay drops a PUBLISH that arrives before HELLO. It also reads one frame per WebSocket message, so two frames in one message lose the second. That rules out sending CLASP straight from `curl wss://`, which is why the curl examples use the MQTT door.
 
 The full codec BUCK uses is `lib/buckproto/src/clasp_codec.cpp`, and `test/test_protocols` has frames captured from relay.clasp.to.
+
+## Staying subscribed
+
+The relays drop a session's subscriptions after five minutes in which the relay has sent that client nothing, and they do it without closing the socket. Pings keep getting answered, so the client looks connected and hears nothing. A listener that rarely gets messages, which is exactly what a deer on a wall is, falls into this.
+
+BUCK guards against it with a heartbeat on each link. Every 45 s it publishes to its own `status/beat` and listens for that message to come back through its subscription:
+
+- on CLASP, the relay echoes a SET to every subscriber of the address, the sender included
+- on MQTT, the relay never sends a client its own publishes, so BUCK opens a second, short lived connection, publishes the beat from there, and disconnects
+
+Either way the relay has something to deliver to BUCK every 45 s, which keeps the session active, and the delivery proves the subscription works end to end. If no beat comes back for 140 s, BUCK drops that link and reconnects.
+
+Clients of your own that only listen should do the same, or reconnect every few minutes.
 
 ## Relay behaviour worth knowing
 

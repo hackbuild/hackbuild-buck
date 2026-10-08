@@ -42,6 +42,10 @@ The I2S DMA holds about 60 ms, so the servo hears about the jaw roughly 60 ms be
 
 While talking, "closed" is 10 us short of the calibrated closed end (`JAW_CLOSED_MARGIN_US`). A servo held exactly at the contact point pushes against the head and draws stall current, which on a USB supply is enough to brown out the board. After 0.6 s of quiet the PWM detaches entirely.
 
+Talking moves are rate limited to 60 us per 20 ms block (`JAW_SLEW_US`), about 5 degrees. That caps the servo's current spikes and turns a jump from a held position into a quick glide.
+
+SAM's reciter quietly stops once its phoneme output passes 120 characters, and every digit is a word, so a phone number fills that fast. The synth checks where the reciter's end marker landed; if the piece overflowed, it splits it at the space nearest the middle and tries each half, down to single words.
+
 The jaw never goes outside the calibrated range during speech, `/jaw` or `/sweep`. Only `/servo` and `/probe`, the calibration tools, can reach the full 500 to 2500 us, and `/servo` glides at about 30 degrees a second.
 
 ## Memory
@@ -54,11 +58,11 @@ Everything is allocated once, at boot:
 | audio stream buffer | 8 KB |
 | jaw event queue, 128 events | 1 KB |
 | SAM working memory | 3.7 KB |
-| CLASP link buffers (rx 1 KB, tx 640 B, frame 600 B) | 2.3 KB |
+| CLASP link buffers (rx 2 KB, tx 640 B, frame 600 B) | 3.3 KB |
 | MQTT link buffers (rx 512 B, tx 512 B) | 1 KB |
 | task stacks | 28 KB |
 
-Static RAM use is 48 KB of 320 KB. With WiFi up and a TLS session open, about 95 KB of heap stays free, and the lowest it has been is reported as `minHeap` in `status/info`. No code path allocates per message. The codecs write into caller buffers and point into received frames instead of copying.
+Static RAM use is 49 KB of 320 KB. With WiFi up and a TLS session open, about 95 KB of heap stays free, and the lowest it has been is reported as `minHeap` in `status/info`. No code path allocates per message. The codecs write into caller buffers and point into received frames instead of copying.
 
 The TLS client does allocate when it connects. Before each attempt the CLASP link checks that the largest free block is at least 45 KB and skips the attempt if not, so a fragmented heap delays a reconnect instead of crashing it.
 
@@ -69,13 +73,15 @@ The TLS client does allocate when it connects. Before each attempt the CLASP lin
 | WiFi drops | both links stop; WiFi auto reconnect runs, with a fresh `WiFi.begin` every 30 s; after 20 minutes offline it reboots, once it is quiet |
 | relay unreachable or refuses | that link backs off 2 s, 4 s, 8 s and so on up to 2 minutes, plus up to 25 percent jitter; the other link carries on |
 | link goes silent | WebSocket ping or MQTT PINGREQ every 20 s when idle; nothing heard for 65 s means reconnect |
+| relay drops the subscription but keeps the socket | heartbeat: every 45 s each link sends itself a message through its own subscription (CLASP by SET echo, MQTT from a short lived second connection); no beat back for 140 s means reconnect. Pings cannot catch this, the relay keeps answering them |
 | malformed CLASP frame | ignored, link stays up; the decoder checks every length and nesting depth (fuzzed with 200,000 random frames in the tests) |
-| malformed MQTT stream | link is dropped and reconnected; oversize packets are read off and discarded without losing sync |
-| oversize WebSocket message | read off the wire and dropped, counted |
+| malformed MQTT stream | link is dropped and reconnected |
+| oversize MQTT packet | read to its end so the stream stays in sync, and delivered cut to the 512 byte buffer; the text is then cut to 200 characters as usual |
+| oversize WebSocket message (over 2 KB) | read off the wire and dropped, counted |
 | flood of messages | token bucket (4, then 1 per 3 s) and a cap of 4 waiting network lines |
 | old messages replayed by a relay | ignored: CLASP snapshots are skipped, MQTT messages before SUBACK are skipped |
-| a task hangs | task watchdog, 30 s, on the player, net and loop tasks; the chip resets with a backtrace on serial |
-| crashes in a loop | a counter in RTC memory; three crash resets in a row boot into safe mode with networking off, so serial still works. Five minutes of uptime clears it |
+| a task hangs | task watchdog, 60 s, on the player, net and loop tasks; the chip resets with a backtrace on serial. Every network connect is bounded at 8 s plus the TLS handshake, and every later socket write at 3 s (plain) or 8 s (TLS), with the watchdog fed between steps |
+| crashes in a loop | a counter in RTC memory; three crash resets in a row boot into safe mode with networking off, so serial still works. Five crash-free minutes turn networking back on by themselves; `/reboot` clears the count and boots normally straight away |
 | brownout | the chip resets; `status/info` reports `"reset":"brownout"` so it shows up remotely |
 | nobody reading USB serial | the CDC TX timeout is zero, so logging never blocks |
 
@@ -142,4 +148,6 @@ The platform is pinned to pioarduino 55.03.312-1, which is Arduino core 3.3.12 o
 
 ## Power
 
-Peak draw is the servo, the amp and the WiFi radio together. WiFi transmit power is set to 8.5 dBm, which cuts the radio's bursts from about 300 mA and also suits the SuperMini's antenna. A 1 A USB charger and a 470 to 1000 uF capacitor at the servo cover the rest. On a bus powered hub, BUCK can brown out in the middle of a sentence.
+Peak draw is the amp, the servo and the WiFi radio together, and the amp is the largest part. Measured on the HeatSync head running from a bus powered USB hub: talking at `/vol 50` browned out at the first syllable, the jaw alone at `/vol 0` did not, and `/vol 30` got through a 14 second sentence clean.
+
+The firmware already trims what it can: WiFi transmit power is 8.5 dBm (radio bursts drop from about 300 mA, and the SuperMini's antenna likes it), talking never presses the jaw into its stop, and jaw moves are rate limited. The rest is hardware: a USB charger of 1 A or more and a 470 to 1000 uF capacitor at the servo. On weak power, keep `/vol` around 30.

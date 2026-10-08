@@ -121,7 +121,7 @@ The resistor matters more than it looks. GPIO4 to 7 come out of reset pulled up,
    You should see the banner:
 
    ```
-   [buck] BUCK 1.0.0 on ESP32-C3, id buck-4fb4c3, reset: usb
+   [buck] BUCK 1.1.0 on ESP32-C3, id buck-4fb4c3, reset: usb
    [buck] jaw not calibrated: it stays still until /open and /closed are set
    [buck] type a line to hear it, /help for commands
    [net] no WiFi set, send: /wifi <ssid> <password>
@@ -229,7 +229,7 @@ Common problems:
 | symptom | likely cause |
 |---|---|
 | no sound | BCLK, LRCLK and DIN swapped, or amp V not on 5V |
-| reboots mid sentence, `reset: brownout` | laptop USB port or hub; use a 1 A charger and fit the capacitor |
+| reboots mid sentence, `reset: brownout` | laptop USB port or hub; use a 1 A charger and fit the capacitor, or turn it down with `/vol 30` |
 | jaw buzzes when quiet | it should not: the servo is released 0.6 s after speech. Check `/status` for a held `/servo` |
 | jaw creeps when you plug it in | the 10 k pull-down on GPIO4 is missing |
 | `/net` shows wifi down | 2.4 GHz only; check `/wifi`; the firmware already uses low TX power for the SuperMini antenna |

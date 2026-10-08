@@ -19,22 +19,27 @@ Read `RULES.md` first. It is absolute and wins over this file.
 
 ## where it stands, 2026-10-07
 
-Firmware 1.0.0 is on the HeatSync head and verified end to end, on the HeatSync WiFi:
+Firmware 1.1.0 is on the HeatSync head and verified on the HeatSync WiFi:
 
-- curl over MQTT, `tools/buck.py` over MQTT and CLASP, and the `@clasp-to/core` 4.3.2 SDK all made it speak
+- curl over MQTT, `tools/buck.py` over MQTT and CLASP, and the `@clasp-to/core` 4.3.2 SDK all made it speak; the talk page loaded and showed live status
+- after seven idle minutes, messages still arrived on both links (this failed before the heartbeat; see "things found in CLASP")
+- heartbeats come back on both links every 45 s
+- a 14 second line full of phone numbers played to the end (the reciter split)
 - status (`online`, `speaking`, `said`, `info`) reached subscribers on both relays, late joiners included; the jaw stream ran at about 15 Hz
 - the rate limiter passed 4 of a burst of 6
-- 20 host tests pass, including 200,000 random frames through the CLASP decoder
-- after the last flash: 6 minutes up, no reconnects, heap flat at 94.7 KB free, 74.5 KB lowest
+- 20 host tests pass, including 200,000 random frames through the CLASP decoder; CI builds both environments on every push
 
-The talk page was checked against the same SDK calls from Node, not yet in a browser once it went live.
+An independent review of the firmware found ten problems, all fixed in the same pass: reciter overflow cutting off the ends of lines, watchdog overrun on weak WiFi, safe mode that never recovered, a fragile MQTT heartbeat probe, `speaking` dropping early, oversize messages discarded instead of cut, a tripled backoff on one failed send, a servo cache that skipped writes after `/release`, a jaw jump out of a hold, and a possible synth stall.
 
 The head's saved voice is speed 80, pitch 72 (default is 72, 64). That came from an earlier session and was left as the person running it wanted; `/voice sam` over serial puts it back.
+
+The head's saved volume is 30. On the bench it runs from a bus powered USB hub, and at 50 it browned out at the first syllable of every line; at 30 a 14 second sentence played clean. On a 1 A charger with the servo capacitor it should take 50 or more: `/vol 50`.
 
 ## decisions and why
 
 - Two relays. relay.clasp.to is the only open CLASP WebSocket relay; relay.clasp.chat is the only one with MQTT open, and curl speaks MQTT. Guest tokens on relay.clasp.chat are scoped to `/chat/**`, so one relay could not serve both. curl over `wss://` cannot work: the relay drops PUBLISH before HELLO and reads one frame per WebSocket message.
 - Own WebSocket client and codecs. The CLASP Arduino library (`bindings/arduino`, 1.0.0, on every branch, unpublished) speaks TCP only, and the relays only take WebSocket. The codec follows `crates/clasp-core/src/codec.rs`, with test vectors captured from the live relay.
+- Heartbeat on both links. Because of the idle-session bug above, each link publishes `status/beat` every 45 s and expects it back through its own subscription; 140 s without one means reconnect. CLASP gets the beat back through the SET echo. MQTT does not echo, so a short lived second connection publishes the beat. Keepalive pings cannot catch the bug: the relay answers them the whole time.
 - Ignore replays. relay.clasp.chat replays every stored MQTT topic before SUBACK with retain cleared, so BUCK skips anything on a topic until its SUBACK. CLASP snapshots are skipped too.
 - ESP32-C3, not S3. The print card and bench say S3 SuperMini; the board on the wall is a C3 (esptool says so), wired servo 4, BCLK 5, LRCLK 6, DIN 7.
 - Jaw calibration on the HeatSync head: it was assembled at the servo's end stop with the jaw fully open. The BUCK geometry (shaft out the right cheek, jaw opens clockwise looking at the shaft) put open at the short-pulse end. Probing with single pulses (at most about 12 degrees each, under the 22 degree swing) confirmed it, and closed was found from the open side in small steps. Result: open 500 us, closed 730 us.
@@ -53,6 +58,8 @@ The head's saved voice is speed 80, pitch 72 (default is 72, 64). That came from
 
 Worth fixing upstream in lumencanvas/clasp:
 
+- Idle sessions lose their subscriptions without being closed. `clasp-router` `start_session_cleanup_task` removes a session idle for `session_timeout` (300 s) and its subscriptions, but never closes the transport, and `last_activity` only moves when the router sends to the client (`Session::send`, `try_send`). Client sends and WebSocket pings do not count. A listener that rarely receives anything goes deaf after five minutes while its socket stays up and pongs keep coming. Both relays showed it: BUCK heard nothing for 48 minutes on 2026-10-07 with both links "ready". The fix belongs in the router: close the transport when a session times out, and count inbound traffic as activity.
+- relay.clasp.chat's MQTT side never delivers a client's own publishes back to it.
 - relay.clasp.chat's MQTT bridge stores non-retained publishes and replays them before SUBACK with the retain flag cleared.
 - docs.clasp.to's LLM reference shows `subscribe` callbacks as `(address, value)`; `client.ts` has `(value, address)`.
 - The protocol doc's SET example says payload length 0x1B; its own bytes are 26 (0x1A).
