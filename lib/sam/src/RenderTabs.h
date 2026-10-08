@@ -1,3 +1,6 @@
+// BUCK: every table indexed by a phoneme, stress or amplitude byte is sized
+// to 256 and zero padded. SAM indexes them with the 254 (breath) and 255 (end)
+// markers in places, which read past the original 78 to 82 entries.
 #ifndef RENDERTABS_H
 #define RENDERTABS_H
 
@@ -9,14 +12,14 @@
 
 const unsigned char tab48426[5] PROGMEM = { 0x18, 0x1A, 0x17, 0x17, 0x17 };
 
-const unsigned char tab47492[] PROGMEM =
+const unsigned char tab47492[256] PROGMEM =
 {
 	0 , 0 , 0xE0 , 0xE6 , 0xEC , 0xF3 , 0xF9 , 0 ,
 	6 , 0xC , 6
 };
 
 
-const unsigned char amplitudeRescale[] PROGMEM =
+const unsigned char amplitudeRescale[256] PROGMEM =
 {
 	0 , 1 , 2 , 2 , 2 , 3 , 3 , 4 ,
 	4 , 5 , 6 , 8 , 9 ,0xB ,0xD ,0xF, 0  //17 elements?
@@ -24,7 +27,7 @@ const unsigned char amplitudeRescale[] PROGMEM =
 
 // Used to decide which phoneme's blend lengths. The candidate with the lower score is selected.
 // tab45856
-const unsigned char blendRank[] PROGMEM =
+const unsigned char blendRank[256] PROGMEM =
 {
 	0 , 0x1F , 0x1F , 0x1F , 0x1F , 2 , 2 , 2 ,
 	2 , 2 , 2 , 2 , 2 , 2 , 5 , 5 ,
@@ -41,7 +44,7 @@ const unsigned char blendRank[] PROGMEM =
 
 // Number of frames at the end of a phoneme devoted to interpolating to next phoneme's final value
 //tab45696
-const unsigned char outBlendLength[] PROGMEM =
+const unsigned char outBlendLength[256] PROGMEM =
 {
 	0 , 2 , 2 , 2 , 2 , 4 , 4 , 4 ,
 	4 , 4 , 4 , 4 , 4 , 4 , 4 , 4 ,
@@ -58,7 +61,7 @@ const unsigned char outBlendLength[] PROGMEM =
 
 // Number of frames at beginning of a phoneme devoted to interpolating to phoneme's final value
 // tab45776
-const unsigned char inBlendLength[] PROGMEM =
+const unsigned char inBlendLength[256] PROGMEM =
 {
 	0 , 2 , 2 , 2 , 2 , 4 , 4 , 4 ,
 	4 , 4 , 4 , 4 , 4 , 4 , 4 , 4 ,
@@ -91,7 +94,7 @@ const unsigned char inBlendLength[] PROGMEM =
 // 67: **    27          00011011
 // 70: **    25          00011001
 // tab45936
-const unsigned char sampledConsonantFlags[] PROGMEM =
+const unsigned char sampledConsonantFlags[256] PROGMEM =
 {
     0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
     0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
@@ -107,7 +110,7 @@ const unsigned char sampledConsonantFlags[] PROGMEM =
 
 
 //tab45056
-unsigned char freq1data[]=
+unsigned char freq1data[256]=
 {
 	0x00 ,0x13 ,0x13 ,0x13 ,0x13 , 0xA , 0xE ,0x12
 	,  0x18 ,0x1A ,0x16 ,0x14 ,0x10 ,0x14 , 0xE ,0x12
@@ -122,7 +125,7 @@ unsigned char freq1data[]=
 };
 
 //tab451356
-unsigned char freq2data[]=
+unsigned char freq2data[256]=
 {
 	0x00 , 0x43 , 0x43 , 0x43 , 0x43 , 0x54 , 0x48 , 0x42 ,
 	0x3E , 0x28 , 0x2C , 0x1E , 0x24 , 0x2C , 0x48 , 0x30 ,
@@ -137,7 +140,7 @@ unsigned char freq2data[]=
 };
 
 //tab45216
-unsigned char freq3data[]=
+unsigned char freq3data[256]=
 {
 	0x00 , 0x5B , 0x5B , 0x5B , 0x5B , 0x6E , 0x5D , 0x5B ,
 	0x58 , 0x59 , 0x57 , 0x58 , 0x52 , 0x59 , 0x5D , 0x3E ,
@@ -151,7 +154,7 @@ unsigned char freq3data[]=
 	0x65 , 0x65 , 0x70 , 0x5E , 0x5E , 0x5E , 0x08 , 0x01
 };
 
-const unsigned char ampl1data[] PROGMEM =
+const unsigned char ampl1data[256] PROGMEM =
 {
 	0 , 0 , 0 , 0 , 0 ,0xD ,0xD ,0xE ,
 	0xF ,0xF ,0xF ,0xF ,0xF ,0xC ,0xD ,0xC ,
@@ -165,7 +168,7 @@ const unsigned char ampl1data[] PROGMEM =
 	0 ,0xC , 0 , 0 , 0 , 0 ,0xF ,0xF
 };
 
-const unsigned char ampl2data[] PROGMEM =
+const unsigned char ampl2data[256] PROGMEM =
 {
 	0 , 0 , 0 , 0 , 0 ,0xA ,0xB ,0xD ,
 	0xE ,0xD ,0xC ,0xC ,0xB , 9 ,0xB ,0xB ,
@@ -179,7 +182,7 @@ const unsigned char ampl2data[] PROGMEM =
 	0 ,0xA , 0 , 0 ,0xA , 0 , 0 , 0
 };
 
-const unsigned char ampl3data[] PROGMEM =
+const unsigned char ampl3data[256] PROGMEM =
 {
 	0 , 0 , 0 , 0 , 0 , 8 , 7 , 8 ,
 	8 , 1 , 1 , 0 , 1 , 0 , 7 , 5 ,

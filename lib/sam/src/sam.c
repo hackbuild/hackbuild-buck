@@ -29,9 +29,9 @@ unsigned char mem59=0;
 static unsigned char A, X, Y;
 
 #define input (samdata->sam.input)
-#define stress (samdata->sam.stress)
-#define phonemeLength (samdata->sam.phonemeLength)
-#define phonemeindex (samdata->sam.phonemeindex)
+#define stress (samdata->sam.stressBuf + 1)
+#define phonemeLength (samdata->sam.phonemeLengthBuf + 1)
+#define phonemeindex (samdata->sam.phonemeindexBuf + 1)
 #define phonemeIndexOutput (samdata->sam.phonemeIndexOutput)
 #define stressOutput (samdata->sam.stressOutput)
 #define phonemeLengthOutput (samdata->sam.phonemeLengthOutput)
@@ -211,9 +211,12 @@ void PrepareOutput()
 	X = 0;
 	Y = 0;
 
+	int frames = 0;   // BUCK: frames queued for this Render call
+	int steps = 0;    // BUCK: X is a byte; without an end marker it wrapped and looped forever
 	//pos48551:
 	while(1)
 	{
+		if (++steps > 256) A = 255; else
 		A = phonemeindex[X];
 		if (A == 255)
 		{
@@ -232,6 +235,7 @@ void PrepareOutput()
 			//X = mem[48546];
 			X=temp;
 			Y = 0;
+			frames = 0;
 			continue;
 		}
 
@@ -241,6 +245,19 @@ void PrepareOutput()
 			continue;
 		}
 
+		// BUCK: the output arrays hold 60 phonemes and only a breath (254) used to
+		// empty them. A long run of short phonemes wrote past the end into the
+		// next arrays. Render what is there and start over, as a breath would.
+		// Render's frame tables hold 256 frames (and blending adds a few), so
+		// also flush before a batch could get that long.
+		if (Y >= 59 || (Y > 0 && frames + phonemeLength[X] > 200))
+		{
+			phonemeIndexOutput[Y] = 255;
+			Render();
+			Y = 0;
+			frames = 0;
+		}
+		frames += phonemeLength[X];
 		phonemeIndexOutput[Y] = A;
 		phonemeLengthOutput[Y] = phonemeLength[X];
 		stressOutput[Y] = stress[X];
@@ -259,8 +276,13 @@ void InsertBreath()
 	X++;
 	mem55 = 0;
 	unsigned char mem66 = 0;
+	int guard = 0;
 	while(1)
 	{
+		// BUCK: the loop below could spin forever (see the fallback further down);
+		// it handles one phoneme per pass and there are at most 256, so this
+		// bound is never reached by valid input.
+		if (++guard > 1000) return;
 		//pos48440:
 		X = mem66;
 		index = phonemeindex[X];
@@ -286,6 +308,15 @@ void InsertBreath()
 			mem66++;
 			continue;
 		}
+		// BUCK: mem54 is the last pause seen. In one long word ("ooooo...") there
+		// is none and mem54 is still 255: the original wrote the glottal stop at
+		// index 255, X wrapped to 0, and the loop restarted forever while
+		// overwriting the phoneme list. Make the pause here instead.
+		if (mem54 == 255)
+		{
+			Insert(X, 0, 0, 0);
+			mem54 = X;
+		}
 		X = mem54;
 		phonemeindex[X] = 31;   // 'Q*' glottal stop
 		phonemeLength[X] = 4;
@@ -295,6 +326,7 @@ void InsertBreath()
 		Insert(X, 254, mem59, 0);
 		X++;
 		mem66 = X;
+		mem54 = 255;   // BUCK: the next breath needs a pause of its own, not this one again
 	}
 
 }
@@ -370,6 +402,10 @@ void Insert(unsigned char position/*var57*/, unsigned char mem60, unsigned char 
 	phonemeindex[position] = mem60;
 	phonemeLength[position] = mem59;
 	stress[position] = mem58;
+	// BUCK: the shift above relies on index 255 holding the end marker, but the
+	// working memory starts zeroed, so a full list lost its terminator and
+	// PrepareOutput walked it forever. Keep the marker in place.
+	phonemeindex[255] = 255;
 	return;
 }
 
@@ -1205,7 +1241,9 @@ if (DEBUG_ESP8266SAM_LIB) printf("phoneme %d (%c%c) length %d\n", X, signInputTa
 			mem56 = flags[index];
 
             // not a consonant
-			if ((flags[index] & 64) == 0)
+			// BUCK: was flags[index], which reads past the 81 entry table when index
+			// is the 255 end marker; mem56 already holds the right flags.
+			if ((mem56 & 64) == 0)
 			{
                 // RX or LX?
 				if ((index == 18) || (index == 19))  // 'RX' & 'LX'

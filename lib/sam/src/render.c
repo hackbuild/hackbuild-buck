@@ -72,7 +72,10 @@ void Output8BitAry(int index, unsigned char ary[5])
 	int k=0;
 	for (int i=bp0; i<bp1; i++, k++) outcb(outcbdata, lastAry[k]);
 	memcpy(lastAry, ary, 5);
-	bufferpos = newbufferpos;
+	// BUCK: only bufferpos modulo 50 affects how many samples go out, and the
+	// absolute value grew forever (signed overflow after about 32 minutes of
+	// speech). Keeping the remainder gives identical output.
+	bufferpos = newbufferpos % 50;
 	oldtimetableindex = index;
 }
 void Output8Bit(int index, unsigned char A)
@@ -743,6 +746,7 @@ if (DEBUG_ESP8266SAM_LIB)
 
     // add the length of this phoneme
 	mem48 = mem49 + phonemeLengthOutput[mem44];
+	if (mem48 == 0) return;   // BUCK: nothing to render; the loop below needs at least one frame
 
 
 // ASSIGN PITCH CONTOUR
@@ -820,7 +824,10 @@ if (DEBUG_ESP8266SAM_LIB)
 
 			// skip ahead two in the phoneme buffer
 			Y += 2;
-			mem48 -= 2;
+			// BUCK: was mem48 -= 2. With one frame left that wrapped to 255 and the
+			// loop below, which stops only at exactly 0, ran on for hundreds more
+			// frames, sometimes forever.
+			mem48 = mem48 > 2 ? mem48 - 2 : 0;
 		} else
 		{
             // simulate the glottal pulse and formants

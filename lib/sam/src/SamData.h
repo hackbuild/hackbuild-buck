@@ -33,9 +33,12 @@ typedef struct s_samdata
     struct sam
     {
         char input[256]; //tab39445
-        unsigned char stress[256]; //numbers from 0 to 8
-        unsigned char phonemeLength[256]; //tab40160
-        unsigned char phonemeindex[256];
+        // BUCK: one guard byte in front of each. sam.c reads [pos-1] and [X-1]
+        // with pos or X at 0 in several rules; the macros in sam.c point one
+        // past the guard, so index -1 lands on a zeroed byte (a pause).
+        unsigned char stressBuf[257]; //numbers from 0 to 8
+        unsigned char phonemeLengthBuf[257]; //tab40160
+        unsigned char phonemeindexBuf[257];
         unsigned char phonemeIndexOutput[60]; //tab47296
         unsigned char stressOutput[60]; //tab47365
         unsigned char phonemeLengthOutput[60]; //tab47416

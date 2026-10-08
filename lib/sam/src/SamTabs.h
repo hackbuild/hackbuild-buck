@@ -1,3 +1,6 @@
+// BUCK: every table indexed by a phoneme, stress or amplitude byte is sized
+// to 256 and zero padded. SAM indexes them with the 254 (breath) and 255 (end)
+// markers in places, which read past the original 78 to 82 entries.
 #ifndef SAMTABS_H
 #define SAMTABS_H
 
@@ -8,13 +11,13 @@
 #endif
 
 //tab40672
-const unsigned char stressInputTable[] PROGMEM =
+const unsigned char stressInputTable[256] PROGMEM =
 {
 	'*', '1', '2', '3', '4', '5', '6', '7', '8'
 };
 
 //tab40682
-const unsigned char signInputTable1[] PROGMEM =
+const unsigned char signInputTable1[256] PROGMEM =
 {
 	' ', '.', '?', ',', '-', 'I', 'I', 'E',
 	'A', 'A', 'A', 'A', 'U', 'A', 'I', 'E',
@@ -30,7 +33,7 @@ const unsigned char signInputTable1[] PROGMEM =
 };
 
 //tab40763
-const unsigned char signInputTable2[] PROGMEM =
+const unsigned char signInputTable2[256] PROGMEM =
 {
 	'*', '*', '*', '*', '*', 'Y', 'H', 'H',
 	'E', 'A', 'H', 'O', 'H', 'X', 'X', 'R',
@@ -46,7 +49,7 @@ const unsigned char signInputTable2[] PROGMEM =
 };
 
 //loc_9F8C
-const unsigned char flags[]={
+const unsigned char flags[256]={
 	0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0xA4 , 0xA4 , 0xA4 ,
 	0xA4 , 0xA4 , 0xA4 , 0x84 , 0x84 , 0xA4 , 0xA4 , 0x84 ,
 	0x84 , 0x84 , 0x84 , 0x84 , 0x84 , 0x84 , 0x44 , 0x44 ,
@@ -64,7 +67,7 @@ const unsigned char flags[]={
 
 //??? flags overlap flags2
 //loc_9FDA
-const unsigned char flags2[] =
+const unsigned char flags2[256] =
 {
 	0x80 , 0xC1 , 0xC1 , 0xC1 , 0xC1 , 0x00 , 0x00 , 0x00 ,
 	0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 , 0x00 ,
@@ -81,7 +84,7 @@ const unsigned char flags2[] =
 
 
 //tab45616???
-const unsigned char phonemeStressedLengthTable[] PROGMEM =
+const unsigned char phonemeStressedLengthTable[256] PROGMEM =
 {
 	0x00 , 0x12 , 0x12 , 0x12 , 8 ,0xB , 9 ,0xB ,
 	0xE ,0xF ,0xB , 0x10 ,0xC , 6 , 6 ,0xE ,
@@ -96,7 +99,7 @@ const unsigned char phonemeStressedLengthTable[] PROGMEM =
 };
 
 //tab45536???
-const unsigned char phonemeLengthTable[] PROGMEM =
+const unsigned char phonemeLengthTable[256] PROGMEM =
 {
 	0 , 0x12 , 0x12 , 0x12 , 8 , 8 , 8 , 8 ,
 	8 ,0xB , 6 ,0xC ,0xA , 5 , 5 ,0xB ,
