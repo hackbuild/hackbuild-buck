@@ -1,0 +1,1 @@
+{"name":"sam","version":"1.0.0","description":"SAM speech synth via ESP8266SAM, with a per-frame hook","license":"GPL-3.0-or-later","build":{"flags":["-w"]}}
