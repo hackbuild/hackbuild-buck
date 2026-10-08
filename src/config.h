@@ -2,7 +2,7 @@
 // Anything a person changes at runtime lives in settings.h instead.
 #pragma once
 
-#define FW_VERSION "1.0.0"
+#define FW_VERSION "1.1.0"
 
 // Pins on the ESP32-C3 SuperMini. GPIO2, 8 and 9 are strapping pins (8 is the
 // onboard LED, 9 is BOOT) and 20/21 are the UART, so none of those are used.
@@ -32,6 +32,7 @@
 #define JAW_ATTACK_MS 30
 #define JAW_RELEASE_MS 70
 #define JAW_CLOSED_MARGIN_US 10  // talking stops this short of the closed end so the jaw never presses (and stalls) against the head
+#define JAW_SLEW_US 60             // most a talking jaw moves per 20 ms block, about 5 degrees
 #define SERVO_MIN_US 500
 #define SERVO_MAX_US 2500
 
@@ -72,6 +73,11 @@
 #define LINK_HANDSHAKE_TIMEOUT_MS 10000
 #define LINK_PING_MS 20000
 #define LINK_DEAD_MS 65000            // nothing heard for this long: reconnect
+// Heartbeat: each link publishes to its own status/beat and listens for the echo.
+// The echo is what keeps a relay from expiring the session as idle, and a missing
+// echo means the subscription is gone even though the socket still answers pings.
+#define BEAT_MS 45000
+#define BEAT_DEAD_MS 140000           // about three missed beats: reconnect
 #define LINK_BACKOFF_MIN_MS 2000
 #define LINK_BACKOFF_MAX_MS 120000
 #define INFO_PERIOD_MS 60000
@@ -81,4 +87,4 @@
 // Crash handling.
 #define SAFE_MODE_CRASHES 3           // this many crash resets in a row: boot without networking
 #define CRASH_CLEAR_MS (5UL * 60000)  // uptime that clears the crash count
-#define WDT_TIMEOUT_MS 30000
+#define WDT_TIMEOUT_MS 60000          // covers a slow DNS lookup plus a TLS handshake

@@ -22,7 +22,7 @@ SamData *samdata = nullptr;
 
 namespace {
 
-const int CHUNK_MAX = 80;          // characters per SAM call; its phoneme buffer is 256 bytes
+const int CHUNK_MAX = 80;          // characters per first pass; sayPiece splits again if SAM overflows
 
 struct Utterance {
   Source src;
@@ -52,6 +52,7 @@ StreamBufferHandle_t audio;
 
 volatile bool stopReq = false;
 volatile bool speaking = false;
+volatile bool synthBusy = false;   // the synth is working on a line (it may not have audio out yet)
 volatile int remoteWaiting = 0;
 portMUX_TYPE remoteLock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -68,14 +69,18 @@ uint32_t eventSeq = 0;
 // ------------------------------------------------------------ servo, player task only
 
 bool servoOn = false;
+int writtenUs = -1;                // duty currently on the LEDC channel; -1 after attach
 
+// lastUs is where the servo is believed to be (kept across release, used to glide);
+// writtenUs only caches what the PWM channel holds, so a fresh attach always writes.
 void servoWriteRaw(int us) {
   us = constrain(us, SERVO_MIN_US, SERVO_MAX_US);
-  if (!servoOn) { ledcAttach(PIN_SERVO, 50, 14); servoOn = true; }
-  if (us != lastUs) {
+  if (!servoOn) { ledcAttach(PIN_SERVO, 50, 14); servoOn = true; writtenUs = -1; }
+  if (us != writtenUs) {
     ledcWrite(PIN_SERVO, (uint32_t)us * ((1 << 14) - 1) / 20000);
-    lastUs = us;
+    writtenUs = us;
   }
+  lastUs = us;
 }
 
 // Inside the calibrated swing only. Uncalibrated: does nothing.
@@ -90,6 +95,7 @@ void servoRelease() {
   ledcWrite(PIN_SERVO, 0);
   ledcDetach(PIN_SERVO);
   servoOn = false;
+  writtenUs = -1;
   gpio_set_level((gpio_num_t)PIN_SERVO, 0);
   gpio_set_direction((gpio_num_t)PIN_SERVO, GPIO_MODE_OUTPUT);
 }
@@ -121,6 +127,16 @@ int talkUs(float f) {
   int closed = cfg.closedUs + (span > 0 ? margin : -margin);
   f = constrain(f, 0.0f, 1.0f);
   return closed + (int)lroundf((cfg.openUs - closed) * f);
+}
+
+// Talking moves are rate limited. Each 20 ms block moves at most JAW_SLEW_US,
+// which caps the servo's current spikes (and the brownouts they cause) and turns a
+// jump from a held position into a quick glide.
+void talkToward(int target) {
+  int from = lastUs;
+  int next = target;
+  if (from >= 0 && abs(target - from) > JAW_SLEW_US) next = from + (target > from ? JAW_SLEW_US : -JAW_SLEW_US);
+  servoWriteJaw(next);
 }
 
 // One step of a slow glide toward `target`: about 30 degrees per second.
@@ -163,18 +179,49 @@ void samFrame(unsigned char f1, unsigned char a1, unsigned char, unsigned char f
     o = f * a;
   }
   JawEvent e = {produced + (uint32_t)outN, (uint8_t)(o * 255)};
-  xQueueSend(jawQ, &e, portMAX_DELAY);
+  // Never block here: with extreme /speed and /lead settings the player could be
+  // waiting on audio that the synth cannot produce until this queue drains. A
+  // dropped frame only costs the jaw one 10 ms step.
+  xQueueSend(jawQ, &e, 0);
 }
 
-void sayChunk(const char *txt) {
-  static char in[256];
-  int n = 0;
-  for (const char *p = txt; *p && n < CHUNK_MAX; p++) in[n++] = toupper((unsigned char)*p);
-  in[n] = 0;
+// Runs SAM's reciter over txt[0..n) into `in`. Returns the phoneme length before
+// the end marker, or -1 when the reciter cannot handle the text.
+int recite(const char *txt, int n, char *in) {
+  int k = 0;
+  for (int i = 0; i < n && k < CHUNK_MAX; i++) in[k++] = toupper((unsigned char)txt[i]);
+  in[k] = 0;
   strcat(in, "[");
   memset(samdata, 0, sizeof(SamData));
-  if (!TextToPhonemes(in)) {
-    logLine("say", "could not pronounce: %s", txt);
+  if (!TextToPhonemes(in)) return -1;
+  for (int i = 0; i < 256; i++)
+    if ((unsigned char)in[i] == 155) return i;
+  return 255;
+}
+
+// Speaks txt[0..n). SAM's reciter quietly stops once its phoneme output passes
+// 120 characters (reciter.c, pos36654), which numbers reach fast: every digit is
+// a word. When that happens the piece is split at the space nearest its middle
+// and each half is tried again, so nothing at the end of a line goes missing.
+void sayPiece(const char *txt, int n, int depth) {
+  static char in[256];
+  while (n > 0 && *txt == ' ') { txt++; n--; }
+  while (n > 0 && txt[n - 1] == ' ') n--;
+  if (n <= 0 || stopReq) return;
+  int plen = recite(txt, n, in);
+  if (plen < 0) {
+    logLine("say", "could not pronounce: %.*s", n, txt);
+    return;
+  }
+  if (plen > 118 && n > 1 && depth < 8) {
+    int mid = n / 2, cut = -1;
+    for (int d = 0; d <= n / 2 && cut < 0; d++) {
+      if (mid - d > 0 && txt[mid - d] == ' ') cut = mid - d;
+      else if (mid + d < n - 1 && txt[mid + d] == ' ') cut = mid + d;
+    }
+    if (cut < 0) cut = mid;                              // one long word: split it anyway
+    sayPiece(txt, cut, depth + 1);
+    sayPiece(txt + cut, n - cut, depth + 1);
     return;
   }
   SetSpeed(cfg.speed);
@@ -208,10 +255,7 @@ void sayLine(char *line) {
           if (s[i] == ' ') { best = i; break; }
       if (best > 0) cut = best;
     }
-    char save = s[cut];
-    s[cut] = 0;
-    sayChunk(s);
-    s[cut] = save;
+    sayPiece(s, cut, 0);
     s += cut;
   }
 }
@@ -235,11 +279,13 @@ void synthTask(void *) {
     xQueueReceive(textQ, &u, portMAX_DELAY);
     if (u.src == SRC_CLASP || u.src == SRC_MQTT) remoteDone();
     stopReq = false;
+    synthBusy = true;
     speaking = true;
     if (u.text[0] == '\x01') {
       int hz = 440, ms = 1000;
       sscanf(u.text + 1, "%d %d", &hz, &ms);
       toneSamples(hz, ms);
+      synthBusy = false;
       continue;
     }
     ev.seq = ++eventSeq;
@@ -248,6 +294,7 @@ void synthTask(void *) {
     xQueueOverwrite(eventQ, &ev);
     logLine("say", "(%s) %s", sourceName(u.src), u.text);
     sayLine(u.text);
+    synthBusy = false;
   }
 }
 
@@ -321,7 +368,7 @@ void playerTask(void *) {
       idleMs += 20;
       if (idleMs >= 100) {
         tgt = 0;
-        if (uxQueueMessagesWaiting(textQ) == 0) speaking = false;
+        if (!synthBusy && uxQueueMessagesWaiting(textQ) == 0) speaking = false;
         JawEvent e;
         while (xQueueReceive(jawQ, &e, 0) == pdTRUE) {
         }
@@ -356,7 +403,7 @@ void playerTask(void *) {
           }
           servoRelease();
         } else if (idleMs < 600 || lvl > 0.02f) {
-          servoWriteJaw(talkUs(lvl));
+          talkToward(talkUs(lvl));
         } else {
           servoRelease();                                // quiet: no buzz, no heat
         }

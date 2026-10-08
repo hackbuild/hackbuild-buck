@@ -1,8 +1,10 @@
 // Settings that survive a reboot, kept in NVS under the "buck" namespace.
 //
 // Threading: numbers are read live by the audio tasks (32 bit loads are atomic on
-// the C3). Strings are only read at boot; changing one saves it and reboots, so no
-// task ever sees a string half written.
+// the C3). The network strings (id, ssid, pass, relay hosts) are only read at boot;
+// changing one saves it and reboots, so no socket ever sees a string half written.
+// `voice` is the exception: a name for display, rewritten by /voice and by remote
+// voice changes, never used to make a decision.
 #pragma once
 
 #include <stdint.h>

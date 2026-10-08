@@ -49,6 +49,6 @@ void setup() {
 
 void loop() {
   consolePoll();
-  healthTick();
+  if (healthTick()) netBegin();   // safe mode ended on this pass
   delay(5);
 }

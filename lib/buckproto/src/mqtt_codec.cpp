@@ -90,6 +90,7 @@ size_t encodeDisconnect(uint8_t *out, size_t cap) {
 void Reader::reset() {
   state_ = HEADER;
   have_ = 0;
+  read_ = 0;
   remaining_ = 0;
   malformed = false;
 }
@@ -99,6 +100,8 @@ bool Reader::finish() {
   pkt_.flags = header_ & 0x0F;
   pkt_.body = buf_;
   pkt_.len = have_;
+  pkt_.truncated = remaining_ > cap_;
+  if (pkt_.truncated) truncatedCount++;
   state_ = HEADER;
   return true;
 }
@@ -111,6 +114,7 @@ bool Reader::push(uint8_t byte) {
       multiplier_ = 1;
       lengthBytes_ = 0;
       have_ = 0;
+      read_ = 0;
       state_ = LENGTH;
       return false;
     case LENGTH:
@@ -119,15 +123,11 @@ bool Reader::push(uint8_t byte) {
       if (++lengthBytes_ > 4) { malformed = true; state_ = HEADER; return false; }
       if (byte & 0x80) return false;
       if (remaining_ == 0) return finish();
-      if (remaining_ > cap_) { dropped++; state_ = SKIP; return false; }
       state_ = BODY;
       return false;
     case BODY:
-      buf_[have_++] = byte;
-      return have_ == remaining_ ? finish() : false;
-    case SKIP:
-      if (--remaining_ == 0) state_ = HEADER;
-      return false;
+      if (have_ < cap_) buf_[have_++] = byte;
+      return ++read_ == remaining_ ? finish() : false;
   }
   return false;
 }

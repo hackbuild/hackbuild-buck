@@ -53,6 +53,7 @@ void help() {
 
 void saveAndReboot(const char *what) {
   logLine("console", "%s saved, rebooting", what);
+  healthClearCrashes();               // a deliberate restart boots normally, out of safe mode
   Serial.flush();
   delay(300);
   ESP.restart();
@@ -222,6 +223,7 @@ void consolePoll() {
     if (ch == '\r' || ch == '\n') {
       line[len] = 0;
       if (len && !overflow) {
+        if (line[0] != '/' && len > TEXT_MAX) logLine("console", "line cut to %d characters", TEXT_MAX);
         if (line[0] == '/') command(line);
         else if (!speechSay(line, SRC_SERIAL)) logLine("console", "queue full, try /stop");
       } else if (overflow) {

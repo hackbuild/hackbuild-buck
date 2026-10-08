@@ -57,13 +57,18 @@ const char *healthResetReason() {
   }
 }
 
-void healthTick() {
-  if (!cleared && millis() > CRASH_CLEAR_MS) {
-    cleared = true;
-    if (rtcCrashes) logLine("health", "up %lu min, crash count cleared", CRASH_CLEAR_MS / 60000);
-    rtcCrashes = 0;
-  }
+bool healthTick() {
+  if (cleared || millis() < CRASH_CLEAR_MS) return false;
+  cleared = true;
+  if (rtcCrashes) logLine("health", "up %lu min, crash count cleared", CRASH_CLEAR_MS / 60000);
+  rtcCrashes = 0;
+  if (!safeMode) return false;
+  safeMode = false;
+  logLine("health", "no crashes for %lu min, leaving safe mode", CRASH_CLEAR_MS / 60000);
+  return true;
 }
+
+void healthClearCrashes() { rtcCrashes = 0; }
 
 void healthWatchThisTask() { esp_task_wdt_add(nullptr); }
 void healthFeed() { esp_task_wdt_reset(); }

@@ -31,22 +31,24 @@ struct Packet {
   uint8_t flags = 0;               // low nibble of the fixed header
   const uint8_t *body = nullptr;   // variable header + payload
   size_t len = 0;
+  bool truncated = false;          // the packet was longer than the buffer; body holds its start
 };
 
 // Incremental parser. Feed it bytes as they arrive; push() returns true each time
-// a whole packet is ready in `packet()`. A packet longer than the buffer is
-// consumed and dropped (counted in `dropped`) so the stream stays in sync.
+// a whole packet is ready in `packet()`. A packet longer than the buffer is still
+// read to its end, so the stream stays in sync, and is delivered with its first
+// `cap` bytes and `truncated` set (counted in `truncatedCount`).
 class Reader {
  public:
   Reader(uint8_t *buf, size_t cap) : buf_(buf), cap_(cap) {}
   bool push(uint8_t byte);
   const Packet &packet() const { return pkt_; }
   void reset();
-  uint32_t dropped = 0;
+  uint32_t truncatedCount = 0;
   bool malformed = false;          // remaining-length encoding was invalid
 
  private:
-  enum State : uint8_t { HEADER, LENGTH, BODY, SKIP };
+  enum State : uint8_t { HEADER, LENGTH, BODY };
   uint8_t *buf_;
   size_t cap_;
   State state_ = HEADER;
@@ -54,7 +56,8 @@ class Reader {
   uint32_t remaining_ = 0;
   uint32_t multiplier_ = 1;
   uint8_t lengthBytes_ = 0;
-  size_t have_ = 0;
+  size_t have_ = 0;                // bytes stored in buf_
+  uint32_t read_ = 0;              // body bytes consumed, stored or not
   Packet pkt_;
   bool finish();
 };

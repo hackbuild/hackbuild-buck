@@ -258,17 +258,29 @@ void test_mqtt_reader_parses_split_stream() {
   TEST_ASSERT_EQUAL(3, seen);
 }
 
-void test_mqtt_reader_drops_oversize_and_stays_in_sync() {
-  uint8_t buf[8];
+void test_mqtt_reader_truncates_oversize_and_stays_in_sync() {
+  // A 300 byte PUBLISH (two byte length) into a 16 byte buffer: delivered cut
+  // short and flagged, then the next packet still parses.
+  uint8_t buf[16];
   mqtt::Reader r(buf, sizeof(buf));
-  uint8_t big[2 + 100];
-  big[0] = 0x30; big[1] = 100;
-  memset(big + 2, 'x', 100);
-  for (size_t i = 0; i < sizeof(big); i++) TEST_ASSERT_FALSE(r.push(big[i]));
-  TEST_ASSERT_EQUAL(1, r.dropped);
+  uint8_t big[3 + 300];
+  big[0] = 0x30; big[1] = 0xAC; big[2] = 0x02;    // remaining length 300
+  big[3] = 0; big[4] = 3; big[5] = 'a'; big[6] = '/'; big[7] = 'b';
+  memset(big + 8, 'x', sizeof(big) - 8);
+  for (size_t i = 0; i < sizeof(big) - 1; i++) TEST_ASSERT_FALSE(r.push(big[i]));
+  TEST_ASSERT_TRUE(r.push(big[sizeof(big) - 1]));
+  const mqtt::Packet &p = r.packet();
+  TEST_ASSERT_TRUE(p.truncated);
+  TEST_ASSERT_EQUAL(16, p.len);
+  mqtt::Publish pub;
+  TEST_ASSERT_TRUE(mqtt::parsePublish(p, pub));
+  TEST_ASSERT_EQUAL_MEMORY("a/b", pub.topic, 3);
+  TEST_ASSERT_EQUAL(11, pub.payloadLen);
+  TEST_ASSERT_EQUAL(1, r.truncatedCount);
   TEST_ASSERT_FALSE(r.push(0xD0));
   TEST_ASSERT_TRUE(r.push(0x00));
   TEST_ASSERT_EQUAL(mqtt::PINGRESP, r.packet().type);
+  TEST_ASSERT_FALSE(r.packet().truncated);
 }
 
 void test_mqtt_reader_flags_bad_length() {
@@ -346,7 +358,7 @@ int main() {
   RUN_TEST(test_mqtt_connect_with_will);
   RUN_TEST(test_mqtt_subscribe_and_publish_bytes);
   RUN_TEST(test_mqtt_reader_parses_split_stream);
-  RUN_TEST(test_mqtt_reader_drops_oversize_and_stays_in_sync);
+  RUN_TEST(test_mqtt_reader_truncates_oversize_and_stays_in_sync);
   RUN_TEST(test_mqtt_reader_flags_bad_length);
   RUN_TEST(test_mqtt_publish_with_qos1_and_retain);
   RUN_TEST(test_clean_text);
