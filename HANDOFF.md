@@ -16,7 +16,7 @@ Read `RULES.md` first. It is absolute and wins over this file.
 | CLASP door | `wss://relay.clasp.to`, open, no MQTT (DigitalOcean App Platform behind Cloudflare) |
 | MQTT door | `relay.clasp.chat:1883`, open; its CLASP WebSocket side needs a token |
 | curl | `curl -d "hello" mqtt://relay.clasp.chat/hackbuild/buck/heatsync/say` |
-| calendar announcements | https://github.com/hackbuild/buck-announcer, a Cloudflare Worker that sends lines to this head over CLASP |
+| calendar announcements | https://github.com/hackbuild/buck-announcer, a Cloudflare Worker that sends lines to this head over CLASP; verified on the head 2026-10-07 |
 
 ## where it stands, 2026-10-07
 
@@ -34,7 +34,7 @@ Firmware 1.2.0 is on the HeatSync head and verified on the HeatSync WiFi:
 
 An independent review of the firmware found ten problems, all fixed in the same pass: reciter overflow cutting off the ends of lines, watchdog overrun on weak WiFi, safe mode that never recovered, a fragile MQTT heartbeat probe, `speaking` dropping early, oversize messages discarded instead of cut, a tripled backoff on one failed send, a servo cache that skipped writes after `/release`, a jaw jump out of a hold, and a possible synth stall.
 
-The head's saved voice is speed 80, pitch 72 (default is 72, 64). That came from an earlier session and was left as the person running it wanted; `/voice sam` over serial puts it back.
+The head's voice is back on the defaults, `sam` (speed 72, pitch 64), as of 2026-10-08.
 
 The head's saved volume is 30. On the bench it runs from a bus powered USB hub, and at 50 it browned out at the first syllable of every line; at 30 a 14 second sentence played clean. On a 1 A charger with the servo capacitor it should take 50 or more: `/vol 50`.
 
