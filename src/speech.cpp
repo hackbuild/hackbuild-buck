@@ -12,8 +12,7 @@
 
 extern "C" {
 #include "SamData.h"
-#include "reciter.h"
-#include "sam.h"
+#include "sam_say.h"
 extern void (*samFrameHook)(unsigned char f1, unsigned char a1, unsigned char a2, unsigned char flags);
 }
 
@@ -22,7 +21,6 @@ SamData *samdata = nullptr;
 
 namespace {
 
-const int CHUNK_MAX = 80;          // characters per first pass; sayPiece splits again if SAM overflows
 
 struct Utterance {
   Source src;
@@ -154,6 +152,7 @@ uint8_t outBuf[256];
 int outN = 0;
 
 void flushOut() {
+  healthFeed();   // the synth is on the watchdog: a SAM hang reboots with a backtrace
   if (!outN) return;
   if (!stopReq) {
     xStreamBufferSend(audio, outBuf, outN, portMAX_DELAY);
@@ -185,79 +184,17 @@ void samFrame(unsigned char f1, unsigned char a1, unsigned char, unsigned char f
   xQueueSend(jawQ, &e, 0);
 }
 
-// Runs SAM's reciter over txt[0..n) into `in`. Returns the phoneme length before
-// the end marker, or -1 when the reciter cannot handle the text.
-int recite(const char *txt, int n, char *in) {
-  int k = 0;
-  for (int i = 0; i < n && k < CHUNK_MAX; i++) in[k++] = toupper((unsigned char)txt[i]);
-  in[k] = 0;
-  strcat(in, "[");
-  memset(samdata, 0, sizeof(SamData));
-  if (!TextToPhonemes(in)) return -1;
-  for (int i = 0; i < 256; i++)
-    if ((unsigned char)in[i] == 155) return i;
-  return 255;
-}
+int stopRequested(void *) { return stopReq ? 1 : 0; }
 
-// Speaks txt[0..n). SAM's reciter quietly stops once its phoneme output passes
-// 120 characters (reciter.c, pos36654), which numbers reach fast: every digit is
-// a word. When that happens the piece is split at the space nearest its middle
-// and each half is tried again, so nothing at the end of a line goes missing.
-void sayPiece(const char *txt, int n, int depth) {
-  static char in[256];
-  while (n > 0 && *txt == ' ') { txt++; n--; }
-  while (n > 0 && txt[n - 1] == ' ') n--;
-  if (n <= 0 || stopReq) return;
-  int plen = recite(txt, n, in);
-  if (plen < 0) {
-    logLine("say", "could not pronounce: %.*s", n, txt);
-    return;
-  }
-  if (plen > 118 && n > 1 && depth < 8) {
-    int mid = n / 2, cut = -1;
-    for (int d = 0; d <= n / 2 && cut < 0; d++) {
-      if (mid - d > 0 && txt[mid - d] == ' ') cut = mid - d;
-      else if (mid + d < n - 1 && txt[mid + d] == ' ') cut = mid + d;
-    }
-    if (cut < 0) cut = mid;                              // one long word: split it anyway
-    sayPiece(txt, cut, depth + 1);
-    sayPiece(txt + cut, n - cut, depth + 1);
-    return;
-  }
-  SetSpeed(cfg.speed);
-  SetPitch(cfg.pitch);
-  SetThroat(cfg.throat);
-  SetMouth(cfg.mouth);
-  EnableSingmode(0);
-  SetInput(in);
-  SAMMain(samByte, nullptr);
+// Cleans the line (samTame) and speaks it through samSay, which keeps SAM away
+// from the inputs that used to hang or corrupt it. lib/sam/src/sam_say.c has the
+// details; test/test_sam runs the same code on the host.
+void sayLine(const char *line) {
+  static char tamed[TEXT_MAX + TEXT_MAX / 14 + 2];
+  samTame(line, tamed, sizeof(tamed));
+  SamVoice v = {(uint8_t)cfg.speed, (uint8_t)cfg.pitch, (uint8_t)cfg.throat, (uint8_t)cfg.mouth};
+  samSay(tamed, &v, samByte, nullptr, stopRequested);
   flushOut();
-}
-
-// Keep what SAM's reciter knows (letters, digits, a little punctuation), then cut
-// into chunks at sentence ends, then commas, then spaces.
-void sayLine(char *line) {
-  for (char *p = line; *p; p++) {
-    unsigned char c = *p;
-    if (!(isalnum(c) || strchr(" .,?!'-:;", c))) *p = ' ';
-  }
-  char *s = line;
-  while (*s && !stopReq) {
-    while (*s == ' ') s++;
-    if (!*s) break;
-    int len = strlen(s), cut = min(len, CHUNK_MAX);
-    if (len > CHUNK_MAX) {
-      int best = -1;
-      for (int i = 0; i < cut; i++)
-        if (strchr(".?!;:,", s[i])) best = i + 1;
-      if (best < 0)
-        for (int i = cut - 1; i > 0; i--)
-          if (s[i] == ' ') { best = i; break; }
-      if (best > 0) cut = best;
-    }
-    sayPiece(s, cut, 0);
-    s += cut;
-  }
 }
 
 void toneSamples(int hz, int ms) {
@@ -275,8 +212,13 @@ void synthTask(void *) {
   static Utterance u;              // static: 400 bytes stay off this task's stack
   static SpeechEvent ev;
   samFrameHook = samFrame;
+  healthWatchThisTask();
   for (;;) {
-    xQueueReceive(textQ, &u, portMAX_DELAY);
+    // Waits at most 10 s at a time so an idle synth still feeds the watchdog.
+    if (xQueueReceive(textQ, &u, pdMS_TO_TICKS(10000)) != pdTRUE) {
+      healthFeed();
+      continue;
+    }
     if (u.src == SRC_CLASP || u.src == SRC_MQTT) remoteDone();
     stopReq = false;
     synthBusy = true;

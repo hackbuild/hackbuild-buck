@@ -2,7 +2,7 @@
 // Anything a person changes at runtime lives in settings.h instead.
 #pragma once
 
-#define FW_VERSION "1.1.0"
+#define FW_VERSION "1.2.0"
 
 // Pins on the ESP32-C3 SuperMini. GPIO2, 8 and 9 are strapping pins (8 is the
 // onboard LED, 9 is BOOT) and 20/21 are the UART, so none of those are used.
