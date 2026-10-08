@@ -4,6 +4,7 @@
 #include <esp_random.h>
 
 #include "../config.h"
+#include "../health.h"
 #include "../log.h"
 #include "../remote.h"
 #include "ca_roots.h"
@@ -70,6 +71,7 @@ void ClaspLink::begin(const char *url, const char *id, bool tlsVerify) {
   snprintf(root_, sizeof(root_), "/%s/%s", ADDR_ROOT, id);
   snprintf(sayAddr_, sizeof(sayAddr_), "%s/say", root_);
   snprintf(voiceAddr_, sizeof(voiceAddr_), "%s/voice", root_);
+  snprintf(beatAddr_, sizeof(beatAddr_), "%s/status/beat", root_);
   verify_ = tlsVerify;
   enabled_ = true;
   state_ = LINK_WAIT;
@@ -106,7 +108,10 @@ bool ClaspLink::connectNow() {
     else tls_.setInsecure();
   }
   NetworkClient &net = secure_ ? (NetworkClient &)tls_ : plain_;
-  if (!ws_.open(net, host_, port_, path_, "clasp", LINK_CONNECT_TIMEOUT_MS + LINK_HANDSHAKE_TIMEOUT_MS)) {
+  healthFeed();
+  bool ok = ws_.open(net, host_, port_, path_, "clasp", LINK_CONNECT_TIMEOUT_MS, LINK_HANDSHAKE_TIMEOUT_MS);
+  healthFeed();
+  if (!ok) {
     fail(ws_.error());
     return false;
   }
@@ -136,6 +141,12 @@ void ClaspLink::service(uint32_t now) {
   if (state_ == LINK_HANDSHAKE && !due(now, since_ + LINK_HANDSHAKE_TIMEOUT_MS)) return;
   if (state_ == LINK_HANDSHAKE) { fail("no WELCOME from relay"); return; }
   if (due(now, ws_.lastRxMs() + LINK_DEAD_MS)) { fail("relay went quiet"); return; }
+  if (due(now, beatSeen_ + BEAT_DEAD_MS)) { fail("heartbeat echo lost, relay dropped the subscription"); return; }
+  if (due(now, beatSent_ + BEAT_MS)) {
+    beatSent_ = now;
+    send(clasp::encodeSetInt(frame_, sizeof(frame_), beatAddr_, (int64_t)(now / 1000)));
+    if (state_ != LINK_READY) return;
+  }
   if (due(now, lastTx_ + LINK_PING_MS)) {
     if (!ws_.sendPing()) { fail("ping failed"); return; }
     lastTx_ = now;
@@ -152,14 +163,28 @@ void ClaspLink::onFrame(const uint8_t *f, size_t n) {
       connects++;
       backoff_.reset();
       err_ = "";
+      // send() calls fail() and drops to LINK_WAIT on error; stop at the first one
+      // so a dead socket costs one backoff step, not three.
       send(clasp::encodeSubscribe(frame_, sizeof(frame_), 1, sayAddr_));
+      if (state_ != LINK_READY) return;
       send(clasp::encodeSubscribe(frame_, sizeof(frame_), 2, voiceAddr_));
+      if (state_ != LINK_READY) return;
+      send(clasp::encodeSubscribe(frame_, sizeof(frame_), 3, beatAddr_));
+      if (state_ != LINK_READY) return;
+      beatSeen_ = millis();
+      beatSent_ = beatSeen_ - BEAT_MS + 3000;      // first beat a few seconds in
       setParam("online", true);
+      if (state_ != LINK_READY) return;
       logLine("clasp", "ready on %s, listening at %s", host_, sayAddr_);
       return;
     case clasp::MSG_PUBLISH:
     case clasp::MSG_SET: {
       if (state_ != LINK_READY || !m.hasValue) return;
+      if (clasp::addrIs(m.addr, m.addrLen, beatAddr_)) {
+        beatSeen_ = millis();
+        beats++;
+        return;
+      }
       char text[REMOTE_TEXT_MAX + 1];
       size_t len = valueText(m.value, text, sizeof(text));
       if (clasp::addrIs(m.addr, m.addrLen, sayAddr_)) {
@@ -216,6 +241,7 @@ void MqttLink::begin(const char *host, uint16_t port, const char *id) {
   snprintf(sayTopic_, sizeof(sayTopic_), "%s/say", root_);
   snprintf(voiceTopic_, sizeof(voiceTopic_), "%s/voice", root_);
   snprintf(willTopic_, sizeof(willTopic_), "%s/status/online", root_);
+  snprintf(beatTopic_, sizeof(beatTopic_), "%s/status/beat", root_);
   state_ = LINK_WAIT;
   nextTry_ = millis();
   backoff_.reset();
@@ -260,10 +286,14 @@ bool MqttLink::sendRaw(size_t n) {
 }
 
 bool MqttLink::connectNow() {
-  if (!tcp_.connect(host_, port_, LINK_CONNECT_TIMEOUT_MS)) { fail("connect failed"); return false; }
+  healthFeed();
+  bool ok = tcp_.connect(host_, port_, LINK_CONNECT_TIMEOUT_MS);
+  healthFeed();
+  if (!ok) { fail("connect failed"); return false; }
+  tcp_.setConnectionTimeout(3000);                 // bounds every later write to 3 s
   tcp_.setNoDelay(true);
   reader_.reset();
-  sayLive_ = voiceLive_ = false;
+  sayLive_ = voiceLive_ = beatLive_ = false;
   mqtt::Will will;
   will.topic = willTopic_;
   will.message = "false";
@@ -296,6 +326,11 @@ void MqttLink::service(uint32_t now) {
     return;
   }
   if (due(now, lastRx_ + LINK_DEAD_MS)) { fail("broker went quiet"); return; }
+  if (due(now, beatSeen_ + BEAT_DEAD_MS)) { fail("heartbeat echo lost, broker dropped the subscription"); return; }
+  if (due(now, beatSent_ + BEAT_MS)) {
+    beatSent_ = now;
+    beatFromProbe(now);
+  }
   if (due(now, lastTx_ + LINK_PING_MS)) sendRaw(mqtt::encodePingreq(txBuf_, sizeof(txBuf_)));
 }
 
@@ -311,6 +346,9 @@ void MqttLink::onPacket(const mqtt::Packet &p) {
       err_ = "";
       if (!sendRaw(mqtt::encodeSubscribe(txBuf_, sizeof(txBuf_), 1, sayTopic_))) return;
       if (!sendRaw(mqtt::encodeSubscribe(txBuf_, sizeof(txBuf_), 2, voiceTopic_))) return;
+      if (!sendRaw(mqtt::encodeSubscribe(txBuf_, sizeof(txBuf_), 3, beatTopic_))) return;
+      beatSeen_ = millis();
+      beatSent_ = beatSeen_ - BEAT_MS + 3000;
       publish("online", "true");
       logLine("mqtt", "ready on %s:%u, listening at %s", host_, port_, sayTopic_);
       return;
@@ -322,6 +360,7 @@ void MqttLink::onPacket(const mqtt::Packet &p) {
       if (granted == 0x80) logLine("mqtt", "subscription %u refused", id);
       if (id == 1) sayLive_ = true;
       if (id == 2) voiceLive_ = true;
+      if (id == 3) beatLive_ = true;
       return;
     }
     case mqtt::PUBLISH: {
@@ -329,6 +368,11 @@ void MqttLink::onPacket(const mqtt::Packet &p) {
       if (!mqtt::parsePublish(p, pub)) return;
       bool say = pub.topicLen == strlen(sayTopic_) && !memcmp(pub.topic, sayTopic_, pub.topicLen);
       bool voice = pub.topicLen == strlen(voiceTopic_) && !memcmp(pub.topic, voiceTopic_, pub.topicLen);
+      bool beat = pub.topicLen == strlen(beatTopic_) && !memcmp(pub.topic, beatTopic_, pub.topicLen);
+      if (beat) {
+        if (beatLive_) { beatSeen_ = millis(); beats++; }
+        return;
+      }
       // The relay replays stored values before it sends SUBACK, flagged as live
       // messages. Anything that arrives before our SUBACK is history: skip it.
       if (say && sayLive_ && !pub.retain) {
@@ -342,6 +386,49 @@ void MqttLink::onPacket(const mqtt::Packet &p) {
     default:
       return;                                     // PINGRESP and the rest
   }
+}
+
+// The relay never delivers a client's own publishes back to it, so the heartbeat
+// comes from a second, short lived connection: connect, publish, disconnect. The
+// main connection receiving it proves the subscription is alive and counts as
+// activity on the relay. Plain TCP, a few dozen bytes, bounded at about 3 s.
+void MqttLink::beatFromProbe(uint32_t now) {
+  healthFeed();
+  bool ok = probe_.connect(host_, port_, 3000);    // also bounds the probe's writes and reads to 3 s
+  healthFeed();
+  if (!ok) return;                                 // a missed beat; three in a row reconnects
+  probe_.setNoDelay(true);
+  uint8_t buf[160];
+  char id[64], n[16];
+  snprintf(id, sizeof(id), "%s-beat", clientId_);
+  snprintf(n, sizeof(n), "%lu", (unsigned long)(now / 1000));
+  mqtt::Will none;
+  size_t len = mqtt::encodeConnect(buf, sizeof(buf), id, 10, none);
+  if (len && probe_.write(buf, len) == len) {
+    // Read the CONNACK so the socket closes clean: closing with unread data makes
+    // lwIP send a reset, which can throw away the PUBLISH still in flight.
+    uint8_t ack[4];
+    size_t got = 0;
+    uint32_t deadline = millis() + 2000;
+    while (got < sizeof(ack) && probe_.connected() && !due(millis(), deadline)) {
+      int c = probe_.read();
+      if (c < 0) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
+      ack[got++] = (uint8_t)c;
+    }
+    if (got == 4 && ack[0] == 0x20 && ack[3] == 0) {
+      len = mqtt::encodePublish(buf, sizeof(buf), beatTopic_, (const uint8_t *)n, strlen(n), false);
+      if (len) probe_.write(buf, len);
+      len = mqtt::encodeDisconnect(buf, sizeof(buf));
+      probe_.write(buf, len);
+      // The broker closes after DISCONNECT. Wait briefly for that so our side
+      // closes second and nothing queued is lost.
+      deadline = millis() + 500;
+      while (probe_.connected() && !due(millis(), deadline)) {
+        if (probe_.read() < 0) vTaskDelay(pdMS_TO_TICKS(10));
+      }
+    }
+  }
+  probe_.stop();
 }
 
 void MqttLink::publish(const char *leaf, const char *text) {

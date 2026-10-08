@@ -44,13 +44,12 @@ bool WsClient::readLine(char *line, size_t cap, uint32_t deadline) {
 }
 
 bool WsClient::open(NetworkClient &net, const char *host, uint16_t port, const char *path, const char *subprotocol,
-                    uint32_t timeoutMs) {
+                    uint32_t connectMs, uint32_t upgradeMs) {
   close();
   net_ = &net;
   err_ = "";
-  uint32_t deadline = millis() + timeoutMs;
-  if (!net.connect(host, port, (int32_t)timeoutMs)) { err_ = "connect failed"; return false; }
-  net.setTimeout(2000);
+  if (!net.connect(host, port, (int32_t)connectMs)) { err_ = "connect failed"; return false; }
+  uint32_t deadline = millis() + upgradeMs;
 
   uint8_t keyRaw[16];
   esp_fill_random(keyRaw, sizeof(keyRaw));

@@ -24,15 +24,16 @@ void buildInfo(char *out, size_t cap) {
   RemoteStats rs = remoteStats();
   snprintf(out, cap,
            "{\"fw\":\"%s\",\"id\":\"%s\",\"up\":%lu,\"heap\":%lu,\"minHeap\":%lu,\"rssi\":%d,"
-           "\"reset\":\"%s\",\"crashes\":%lu,\"queue\":%d,\"heard\":%lu,\"limited\":%lu,\"voice\":\"%s\"}",
+           "\"reset\":\"%s\",\"crashes\":%lu,\"queue\":%d,\"heard\":%lu,\"limited\":%lu,\"voice\":\"%s\","
+           "\"clasp\":\"%s\",\"mqtt\":\"%s\"}",
            FW_VERSION, cfg.id, (unsigned long)(millis() / 1000), (unsigned long)ESP.getFreeHeap(),
            (unsigned long)ESP.getMinFreeHeap(), (int)WiFi.RSSI(), healthResetReason(),
            (unsigned long)healthCrashCount(), speechQueued(), (unsigned long)rs.accepted, (unsigned long)rs.limited,
-           cfg.voice);
+           cfg.voice, linkStateName(claspLink.state()), linkStateName(mqttLink.state()));
 }
 
 void publishInfo() {
-  char info[256];
+  char info[320];
   buildInfo(info, sizeof(info));
   claspLink.setParam("info", info);
   mqttLink.publish("info", info);
@@ -96,7 +97,9 @@ void netTask(void *) {
     }
 
     claspLink.service(now);
+    healthFeed();
     mqttLink.service(millis());
+    healthFeed();
     now = millis();
 
     // A link that came up on this pass gets the full picture.
@@ -144,9 +147,10 @@ void netTask(void *) {
 }  // namespace
 
 void netBegin() {
+  if (started) return;
   if (healthSafeMode()) {
-    logLine("net", "safe mode: networking off after %lu crashes in a row, /reboot to try again",
-            (unsigned long)healthCrashCount());
+    logLine("net", "safe mode: networking off after %lu crashes in a row; it comes back after %lu quiet "
+            "minutes, or /reboot to try now", (unsigned long)healthCrashCount(), CRASH_CLEAR_MS / 60000);
     return;
   }
   if (!cfg.ssid[0]) {
@@ -166,13 +170,13 @@ void netReport(char *out, size_t cap) {
   RemoteStats rs = remoteStats();
   snprintf(out, cap,
            "[net] wifi %s %s rssi %d\n"
-           "[net] clasp %s %s  connects %lu rx %lu tx %lu  %s\n"
-           "[net] mqtt  %s %s:%d  connects %lu rx %lu tx %lu  %s\n"
+           "[net] clasp %s %s  connects %lu rx %lu tx %lu beats %lu  %s\n"
+           "[net] mqtt  %s %s:%d  connects %lu rx %lu tx %lu beats %lu  %s\n"
            "[net] remote heard %lu, limited %lu, queue full %lu, empty %lu",
            cfg.ssid, up ? WiFi.localIP().toString().c_str() : "(down)", up ? (int)WiFi.RSSI() : 0,
            linkStateName(claspLink.state()), cfg.claspUrl, (unsigned long)claspLink.connects,
-           (unsigned long)claspLink.rx, (unsigned long)claspLink.tx, claspLink.lastError(),
+           (unsigned long)claspLink.rx, (unsigned long)claspLink.tx, (unsigned long)claspLink.beats, claspLink.lastError(),
            linkStateName(mqttLink.state()), cfg.mqttHost, cfg.mqttPort, (unsigned long)mqttLink.connects,
-           (unsigned long)mqttLink.rx, (unsigned long)mqttLink.tx, mqttLink.lastError(), (unsigned long)rs.accepted,
+           (unsigned long)mqttLink.rx, (unsigned long)mqttLink.tx, (unsigned long)mqttLink.beats, mqttLink.lastError(), (unsigned long)rs.accepted,
            (unsigned long)rs.limited, (unsigned long)rs.busy, (unsigned long)rs.empty);
 }

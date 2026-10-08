@@ -14,9 +14,11 @@ class WsClient {
  public:
   WsClient(uint8_t *rx, size_t rxCap, uint8_t *tx, size_t txCap) : rx_(rx), rxCap_(rxCap), tx_(tx), txCap_(txCap) {}
 
-  // Opens the TCP or TLS connection on `net` and runs the HTTP upgrade.
+  // Opens the TCP or TLS connection on `net` and runs the HTTP upgrade. The
+  // connect timeout also becomes the socket's send and receive timeout (and the
+  // TLS socket timeout), which bounds every later write.
   bool open(NetworkClient &net, const char *host, uint16_t port, const char *path, const char *subprotocol,
-            uint32_t timeoutMs);
+            uint32_t connectMs, uint32_t upgradeMs);
   void close();
   bool isOpen();
 
