@@ -55,7 +55,7 @@ curl -d "robot" mqtt://relay.clasp.chat/hackbuild/buck/heatsync/voice
 
 ### What BUCK does with your text
 
-1. Cleans it: curly quotes become straight ones, emoji and other non-ASCII become spaces, whitespace collapses.
+1. Cleans it: curly quotes become straight ones, emoji and other non-ASCII become spaces, whitespace collapses. Before speaking, a character repeated more than three times is cut to three ("noooooo" says "nooo") and a word longer than 14 characters is split.
 2. Cuts it to 200 characters. Over MQTT any length is accepted and cut; over CLASP a frame larger than 2 KB is ignored.
 3. Checks the rate limit: a bucket of four messages, refilled at one every three seconds, shared by everyone on both doors.
 4. Checks the queue: at most four network messages wait at once.
@@ -81,7 +81,7 @@ BUCK publishes these whenever they change. On relay.clasp.to they are CLASP para
 `info` looks like this:
 
 ```json
-{"fw":"1.1.0","id":"heatsync","up":3600,"heap":94816,"minHeap":74560,"rssi":-54,
+{"fw":"1.2.0","id":"heatsync","up":3600,"heap":94816,"minHeap":74560,"rssi":-54,
  "reset":"power","crashes":0,"queue":0,"heard":42,"limited":3,"voice":"sam",
  "clasp":"ready","mqtt":"ready"}
 ```

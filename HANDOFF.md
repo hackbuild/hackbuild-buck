@@ -19,7 +19,7 @@ Read `RULES.md` first. It is absolute and wins over this file.
 
 ## where it stands, 2026-10-07
 
-Firmware 1.1.0 is on the HeatSync head and verified on the HeatSync WiFi:
+Firmware 1.2.0 is on the HeatSync head and verified on the HeatSync WiFi:
 
 - curl over MQTT, `tools/buck.py` over MQTT and CLASP, and the `@clasp-to/core` 4.3.2 SDK all made it speak; the talk page loaded and showed live status
 - after seven idle minutes, messages still arrived on both links (this failed before the heartbeat; see "things found in CLASP")
@@ -28,6 +28,8 @@ Firmware 1.1.0 is on the HeatSync head and verified on the HeatSync WiFi:
 - status (`online`, `speaking`, `said`, `info`) reached subscribers on both relays, late joiners included; the jaw stream ran at about 15 Hz
 - the rate limiter passed 4 of a burst of 6
 - 20 host tests pass, including 200,000 random frames through the CLASP decoder; CI builds both environments on every push
+
+1.2.0 fixes the crash a line of the letter o caused: SAM's `InsertBreath` looped forever on a long word, starving the network until the watchdog rebooted the board. Fuzzing SAM under AddressSanitizer then found five more hangs and overruns in it. All are fixed (`lib/sam/README.md` lists them), `test/test_sam` keeps them fixed, 80,000 random lines ran clean on the host, and 60 and 200 o's now play on the head.
 
 An independent review of the firmware found ten problems, all fixed in the same pass: reciter overflow cutting off the ends of lines, watchdog overrun on weak WiFi, safe mode that never recovered, a fragile MQTT heartbeat probe, `speaking` dropping early, oversize messages discarded instead of cut, a tripled backoff on one failed send, a servo cache that skipped writes after `/release`, a jaw jump out of a hold, and a possible synth stall.
 

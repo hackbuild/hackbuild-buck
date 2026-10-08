@@ -121,7 +121,7 @@ The resistor matters more than it looks. GPIO4 to 7 come out of reset pulled up,
    You should see the banner:
 
    ```
-   [buck] BUCK 1.1.0 on ESP32-C3, id buck-4fb4c3, reset: usb
+   [buck] BUCK 1.2.0 on ESP32-C3, id buck-4fb4c3, reset: usb
    [buck] jaw not calibrated: it stays still until /open and /closed are set
    [buck] type a line to hear it, /help for commands
    [net] no WiFi set, send: /wifi <ssid> <password>

@@ -44,7 +44,9 @@ While talking, "closed" is 10 us short of the calibrated closed end (`JAW_CLOSED
 
 Talking moves are rate limited to 60 us per 20 ms block (`JAW_SLEW_US`), about 5 degrees. That caps the servo's current spikes and turns a jump from a held position into a quick glide.
 
-SAM's reciter quietly stops once its phoneme output passes 120 characters, and every digit is a word, so a phone number fills that fast. The synth checks where the reciter's end marker landed; if the piece overflowed, it splits it at the space nearest the middle and tries each half, down to single words.
+Everything reaches SAM through `lib/sam/src/sam_say.c`. `samTame` keeps the input to what SAM's reciter knows, caps any repeated character at three ("soooooo" says "sooo") and splits words longer than 14 characters. `samSay` cuts lines into pieces; SAM's reciter quietly stops once its phoneme output passes 120 characters, and every digit is a word, so a phone number fills that fast. It checks where the reciter's end marker landed and, if a piece overflowed, splits it at the space nearest the middle and tries each half.
+
+SAM itself is old C with byte-sized indexes into fixed arrays. A line of the letter o hung the deer on 2026-10-07 (an endless loop in `InsertBreath`), and fuzzing under AddressSanitizer found five more ways to hang or overrun it. All are fixed and listed in `lib/sam/README.md`, and `test/test_sam` runs the same `samTame`/`samSay` path on the host under the sanitizers, with an alarm on every input so a hang fails the test.
 
 The jaw never goes outside the calibrated range during speech, `/jaw` or `/sweep`. Only `/servo` and `/probe`, the calibration tools, can reach the full 500 to 2500 us, and `/servo` glides at about 30 degrees a second.
 
@@ -80,7 +82,7 @@ The TLS client does allocate when it connects. Before each attempt the CLASP lin
 | oversize WebSocket message (over 2 KB) | read off the wire and dropped, counted |
 | flood of messages | token bucket (4, then 1 per 3 s) and a cap of 4 waiting network lines |
 | old messages replayed by a relay | ignored: CLASP snapshots are skipped, MQTT messages before SUBACK are skipped |
-| a task hangs | task watchdog, 60 s, on the player, net and loop tasks; the chip resets with a backtrace on serial. Every network connect is bounded at 8 s plus the TLS handshake, and every later socket write at 3 s (plain) or 8 s (TLS), with the watchdog fed between steps |
+| a task hangs | task watchdog, 60 s, on the player, synth, net and loop tasks; the chip resets with a backtrace on serial. Every network connect is bounded at 8 s plus the TLS handshake, and every later socket write at 3 s (plain) or 8 s (TLS), with the watchdog fed between steps |
 | crashes in a loop | a counter in RTC memory; three crash resets in a row boot into safe mode with networking off, so serial still works. Five crash-free minutes turn networking back on by themselves; `/reboot` clears the count and boots normally straight away |
 | brownout | the chip resets; `status/info` reports `"reset":"brownout"` so it shows up remotely |
 | nobody reading USB serial | the CDC TX timeout is zero, so logging never blocks |
