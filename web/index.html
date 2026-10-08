@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk to BUCK</title>
+<meta name="description" content="Make the talking deer head at HeatSync Labs say something.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Permanent+Marker&family=Special+Elite&family=VT323&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@clasp-to/core@4.3.2" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --pink: #FE0386;
+    --paper: #f5f0e6;
+    --ink: #1a1a1a;
+    --void: #0a0a0a;
+    --slime: #39ff14;
+    --muted: #6b645a;
+    --shadow: 4px 4px 0 var(--ink);
+  }
+  * { box-sizing: border-box; border-radius: 0; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 17px/1.5 "Special Elite", Georgia, serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 {
+    font: 56px/1 "Permanent Marker", cursive;
+    margin: 0 0 4px;
+    letter-spacing: 1px;
+  }
+  h1 span { color: var(--pink); }
+  .tag { margin: 0 0 24px; }
+  label, .label, button, select, input, code, pre {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  .panel {
+    border: 2px solid var(--ink);
+    background: #fffdf8;
+    box-shadow: var(--shadow);
+    padding: 16px;
+    margin: 0 0 24px;
+  }
+  .screen {
+    background: var(--void);
+    color: var(--slime);
+    border: 2px solid var(--ink);
+    box-shadow: var(--shadow);
+    padding: 12px 16px;
+    margin: 0 0 24px;
+    font: 22px/1.25 "VT323", monospace;
+    min-height: 120px;
+  }
+  .screen .row { display: flex; justify-content: space-between; gap: 12px; }
+  .screen .dim { color: #7f8f7a; }
+  .meter { height: 14px; border: 1px solid var(--slime); margin: 8px 0; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--slime); transition: width 60ms linear; }
+  .said { word-break: break-word; }
+  label { display: block; font-size: 13px; text-transform: lowercase; margin: 0 0 6px; }
+  textarea, select {
+    width: 100%;
+    border: 2px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.4 "IBM Plex Mono", monospace;
+    padding: 10px;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  .controls { display: flex; gap: 12px; margin-top: 12px; align-items: end; flex-wrap: wrap; }
+  .controls > div { flex: 1 1 160px; }
+  button {
+    border: 2px solid var(--ink);
+    background: var(--pink);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 11px 22px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    text-transform: lowercase;
+  }
+  button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+  button:disabled { background: var(--muted); cursor: not-allowed; }
+  .note { font-size: 14px; color: var(--muted); margin: 8px 0 0; font-family: "IBM Plex Mono", monospace; }
+  pre {
+    background: var(--void);
+    color: var(--paper);
+    padding: 12px;
+    overflow-x: auto;
+    font-size: 13px;
+    border: 2px solid var(--ink);
+    margin: 8px 0 0;
+  }
+  h2 { font: 26px/1.1 "Permanent Marker", cursive; margin: 0 0 8px; }
+  a { color: var(--ink); text-decoration-color: var(--pink); text-decoration-thickness: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>talk to <span>BUCK</span></h1>
+  <p class="tag">BUCK is a 3D printed deer head on the wall at <a href="https://www.heatsynclabs.org">HeatSync Labs</a> in Mesa, Arizona. Type something and it says it out loud, jaw and all.</p>
+
+  <div class="screen" aria-live="polite">
+    <div class="row"><span id="link">connecting to relay.clasp.to</span><span id="state" class="dim">...</span></div>
+    <div class="meter" title="jaw"><i id="jaw"></i></div>
+    <div class="said"><span class="dim">said:</span> <span id="said">nothing yet</span></div>
+    <div class="dim" id="info"></div>
+  </div>
+
+  <form class="panel" id="form">
+    <label for="text">what should BUCK say</label>
+    <textarea id="text" maxlength="200" placeholder="hello from the internet" required></textarea>
+    <div class="controls">
+      <div>
+        <label for="voice">voice</label>
+        <select id="voice">
+          <option value="">keep current</option>
+          <option>sam</option><option>elf</option><option>robot</option>
+          <option>stuffy</option><option>oldlady</option><option>et</option>
+        </select>
+      </div>
+      <button id="send" type="submit" disabled>say it</button>
+    </div>
+    <p class="note" id="note">200 characters max. BUCK takes a few lines at a time, then one every 3 seconds.</p>
+  </form>
+
+  <section class="panel">
+    <h2>from a terminal</h2>
+    <p>Any curl with MQTT built in works, including the one on a Mac:</p>
+    <pre id="curl"></pre>
+    <p class="note">Code, wiring, and print files: <a href="https://github.com/hackbuild/hackbuild-buck">github.com/hackbuild/hackbuild-buck</a></p>
+  </section>
+</main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const ID = (params.get('id') || 'heatsync').replace(/[^A-Za-z0-9_-]/g, '');
+  const ROOT = `/hackbuild/buck/${ID}`;
+  const $ = (id) => document.getElementById(id);
+  $('curl').textContent = `curl -d "hello deer" mqtt://relay.clasp.chat/hackbuild/buck/${ID}/say`;
+
+  let client = null;
+  let online = false;
+  let lastStatus = 0;
+
+  function render() {
+    const fresh = Date.now() - lastStatus < 150000;
+    $('state').textContent = online && fresh ? 'buck online' : 'buck offline';
+    $('state').style.color = online && fresh ? '' : '#ff5555';
+  }
+
+  async function start() {
+    client = new CLASP.Clasp('wss://relay.clasp.to', { name: 'buck talk page', reconnect: true });
+    client.onDisconnect(() => { $('link').textContent = 'relay lost, reconnecting'; $('send').disabled = true; });
+    client.onReconnect(() => { $('link').textContent = 'relay connected'; $('send').disabled = false; });
+    await client.connect();
+    $('link').textContent = 'relay connected';
+    $('send').disabled = false;
+
+    client.on(`${ROOT}/status/**`, (value, address) => {
+      const leaf = address.slice(address.lastIndexOf('/') + 1);
+      if (leaf === 'jaw') {
+        $('jaw').style.width = `${Math.round(Math.max(0, Math.min(1, Number(value) || 0)) * 100)}%`;
+        return;
+      }
+      lastStatus = Date.now();
+      if (leaf === 'online') online = value === true;
+      if (leaf === 'speaking') $('state').textContent = value ? 'speaking' : 'listening';
+      if (leaf === 'said') $('said').textContent = String(value);
+      if (leaf === 'info') {
+        try {
+          const i = JSON.parse(value);
+          online = true;
+          $('info').textContent = `up ${Math.floor(i.up / 60)} min, wifi ${i.rssi} dBm, voice ${i.voice}, fw ${i.fw}`;
+        } catch (e) { /* not JSON, ignore */ }
+      }
+      if (leaf !== 'speaking') render();
+    });
+    setInterval(render, 10000);
+  }
+
+  $('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = $('text').value.trim();
+    if (!text || !client) return;
+    const voice = $('voice').value;
+    if (voice) client.emit(`${ROOT}/voice`, voice);
+    client.emit(`${ROOT}/say`, text);
+    $('text').value = '';
+    $('note').textContent = 'sent. if BUCK is busy or you sent a lot at once, it may skip a line.';
+  });
+
+  start().catch((err) => {
+    $('link').textContent = `could not reach relay.clasp.to: ${err.message || err}`;
+  });
+})();
+</script>
+</body>
+</html>
