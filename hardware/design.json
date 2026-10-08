@@ -1,0 +1,118 @@
+{
+ "app": "buck-bench",
+ "v": 2,
+ "state": {
+  "shape": {
+   "scale": 1.15,
+   "muzzle": 1,
+   "neck": 1.1,
+   "crown": 1,
+   "cheek": 1,
+   "tilt": 12,
+   "wall": 2.4,
+   "eye": 1
+  },
+  "eyes": {
+   "mode": "separate",
+   "fit": 0.1
+  },
+  "nose": {
+   "mode": "separate",
+   "fit": 0.15
+  },
+  "jaw": {
+   "open": 22,
+   "gap": 0.5,
+   "shell": "channel",
+   "wall": 2.2
+  },
+  "ears": {
+   "on": true,
+   "size": 1
+  },
+  "antlers": {
+   "style": "crown",
+   "size": 1,
+   "spread": 1
+  },
+  "servo": {
+   "type": "SG90"
+  },
+  "board": {
+   "type": "S3MINI",
+   "custom": {
+    "L": 22.6,
+    "W": 18,
+    "t": 1.2
+   }
+  },
+  "amp": {
+   "type": "NS4168"
+  },
+  "speaker": {
+   "frame": 30,
+   "span": 39,
+   "hole": 2.2,
+   "depth": 7.5,
+   "cone": 20.8,
+   "dome": 2
+  },
+  "mount": {
+   "shape": "shield",
+   "thick": 8,
+   "fill": 0.62,
+   "attach": "screws",
+   "margin": 14,
+   "edge": "ogee",
+   "groove": true,
+   "hang": "hooks",
+   "board": "1/4",
+   "pitchIn": 4,
+   "holeD": 7,
+   "keyholes": false,
+   "snap": 0.7
+  },
+  "slots": [
+   {
+    "color": "#8A5A36",
+    "type": "PETG",
+    "name": "brown"
+   },
+   {
+    "color": "#EAE0CA",
+    "type": "PETG",
+    "name": "bone"
+   },
+   {
+    "color": "#1A1A1A",
+    "type": "PETG",
+    "name": "black"
+   },
+   {
+    "color": "#3B2618",
+    "type": "PETG",
+    "name": "walnut"
+   }
+  ],
+  "roles": {
+   "body": 1,
+   "antler": 2,
+   "eye": 3,
+   "nose": 3,
+   "plaque": 4,
+   "pin": 4
+  },
+  "print": {
+   "mode": "filament",
+   "layer": 0.24,
+   "quality": "draft",
+   "bedW": 256,
+   "bedD": 256,
+   "writeFilaments": true,
+   "printer": "Flashforge Creator 5 Pro 0.4 nozzle",
+   "process": "0.24mm Standard @FF C5",
+   "pattern": "Generic {TYPE} @FF C5P"
+  },
+  "preset": "buck"
+ }
+}

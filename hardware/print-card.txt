@@ -1,0 +1,69 @@
+BUCK PRINT CARD
+========================================
+printer : Flashforge Creator 5 Pro 0.4 nozzle
+process : 0.24mm Standard @FF C5
+layer   : 0.24 mm
+mode    : one filament per plate
+
+PLATES
+  1. brown (PETG #8A5A36, about 80 g at 40 percent infill): head, jaw, ear R, ear L
+  2. bone (PETG #EAE0CA, about 6 g at 40 percent infill): antler R, antler L
+  3. black (PETG #1A1A1A, about 5 g at 40 percent infill): nose, eye R, eye L
+  4. walnut (PETG #3B2618, about 148 g at 40 percent infill): mount, hook L, hook R, pivot pin
+
+ORIENTATION (no supports anywhere)
+  head      : neck rim on the bed
+  jaw       : mouth face on the bed
+  mount     : flat back on the bed
+  nose      : cut face on the bed
+  eye R     : flat back on the bed, dome up
+  eye L     : flat back on the bed, dome up
+  antler R  : flat side on the bed
+  antler L  : flat side on the bed
+  ear R     : lying on its flat back, cup up
+  ear L     : lying on its flat back, cup up
+  pivot pin : on its flat
+  hook L    : on its side
+  hook R    : on its side
+
+FITS
+  eyes press into their sockets with 0.10 mm design clearance; a drop of CA if loose
+  nose cap presses onto the muzzle peg; ears and antlers press into keyed sockets (0.20 mm per side)
+  head slides over the plaque lip (0.5 mm gap) and is held by 3 x M3 x 16 flat head screws from the back into 2.5 mm pilots, 11 mm deep
+
+HARDWARE
+  1  SG90 or MG90S 9 g servo, its single arm horn and its two mounting screws (the horn screw is optional)
+  1  ESP32-S3 SuperMini, stuck down with foam tape or hot glue
+  1  NULLLAB NS4168 I2S amp (3W kit)
+  1  the kit speaker: 30 mm square frame, ears 39 mm apart, 7.5 mm deep
+  2  M3 x 6 screws for the amp (self tapping, or a machine screw that cuts its own thread), with M3 washers
+  2  M2 x 6 self tapping screws for the speaker ears (or #2 x 1/4 in)
+  3  M3 x 16 flat head (countersunk) screws, self tapping or machine, to hold the head to the plaque (or #4 x 5/8 in flat head wood screws)
+  1  USB-C cable
+     hookup wire and the kit's PH2.0 leads
+
+ASSEMBLY
+  1. press the eyes into their sockets, pointed corner toward the nose
+  2. press the nose cap onto the peg at the end of the muzzle
+  3. press the ears and antlers into their keyed sockets
+  4. screw the servo to the fin with its own two screws, gear tower toward the right cheek; leave the horn off
+  5. slide the speaker in under the amp shelf from the right side (the servo horn side): lift it over the seat ring, push it back against the stop and drop it; screw both ears down through the holes in the shelf
+  6. slide the NS4168 in from the same side, components up, input connector leading; drop it onto the two spigots and screw it down with two M3 x 6 and washers, then plug in the speaker lead
+  7. stick the controller onto the plinth on the left face of the fin, USB toward the plaque; the plinth is narrower than the pin rows, so every pin stays free. Wire it, and tuck the leads through the slot in the fin
+  8. feed the USB-C cable through the plaque slot into the controller and lay it in the groove on the back
+  9. slide the head over the fin onto the locating lip, then drive the three M3 x 16 flat head screws in from the back of the plaque until they sit flush. To take the head off later: slide the plaque off its hooks and undo those three screws
+  10. drive the servo to its closed angle, reach in through the mouth and press the horn onto the spline pointing forward and down
+  11. slide the jaw up and back through the mouth so its right arm takes the horn, then push the pivot pin in through the left cheek until it clicks
+  12. roll the two printed hooks into the pegboard 4 inches apart, then slide the plaque onto them from the side
+
+WIRING
+  servo signal -> GPIO 7
+  servo + -> 5V (USB)
+  amp V -> 5V
+  amp G, servo - -> GND
+  amp BCLK -> GPIO 5
+  amp LRCLK -> GPIO 6
+  amp DIN -> GPIO 4
+  speaker -> its PH2.0 plug into the amp; the output is bridge tied, never tie either leg to GND
+
+fallback if a 3MF imports with one filament: open the STLs from the STL zip instead; every part is a single body.
