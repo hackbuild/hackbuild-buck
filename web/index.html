@@ -124,7 +124,7 @@
       </div>
       <button id="send" type="submit" disabled>say it</button>
     </div>
-    <p class="note" id="note">200 characters max. BUCK takes a few lines at a time, then one every 3 seconds.</p>
+    <p class="note" id="note">enter sends, shift+enter for a new line. 200 characters max. BUCK takes a few lines at a time, then one every 3 seconds.</p>
   </form>
 
   <section class="panel">
@@ -145,6 +145,10 @@
   let client = null;
   let online = false;
   let lastStatus = 0;
+  let pending = null;          // { text, timer } for the last line sent from this page
+
+  // BUCK cleans text before speaking it, so compare loosely.
+  const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
   function render() {
     const fresh = Date.now() - lastStatus < 150000;
@@ -169,7 +173,14 @@
       lastStatus = Date.now();
       if (leaf === 'online') online = value === true;
       if (leaf === 'speaking') $('state').textContent = value ? 'speaking' : 'listening';
-      if (leaf === 'said') $('said').textContent = String(value);
+      if (leaf === 'said') {
+        $('said').textContent = String(value);
+        if (pending && norm(value).startsWith(norm(pending.text).slice(0, 40))) {
+          clearTimeout(pending.timer);
+          pending = null;
+          $('note').textContent = 'BUCK heard you and is saying it now.';
+        }
+      }
       if (leaf === 'info') {
         try {
           const i = JSON.parse(value);
@@ -182,6 +193,14 @@
     setInterval(render, 10000);
   }
 
+  // Enter sends, shift+enter makes a new line.
+  $('text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      $('form').requestSubmit();
+    }
+  });
+
   $('form').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = $('text').value.trim();
@@ -190,7 +209,15 @@
     if (voice) client.emit(`${ROOT}/voice`, voice);
     client.emit(`${ROOT}/say`, text);
     $('text').value = '';
-    $('note').textContent = 'sent. if BUCK is busy or you sent a lot at once, it may skip a line.';
+    if (pending) clearTimeout(pending.timer);
+    pending = {
+      text,
+      timer: setTimeout(() => {
+        pending = null;
+        $('note').textContent = 'sent, but BUCK has not said it yet. it may be busy with other lines, rate limited, or offline.';
+      }, 20000),
+    };
+    $('note').textContent = 'sent, waiting for BUCK to say it...';
   });
 
   start().catch((err) => {
