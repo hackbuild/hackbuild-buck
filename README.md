@@ -43,6 +43,8 @@ A few things to know before you send:
 - Voices are `sam`, `elf`, `robot`, `stuffy`, `oldlady`, and `et`. Send one to `/hackbuild/buck/heatsync/voice`.
 - It is a deer on a wall in a room full of people. Be someone they would want to hear from.
 
+The HeatSync BUCK also announces the lab calendar: an hour before each event, and at 9:30 and 9:45 PM before closing. That runs separately, in [hackbuild/buck-announcer](https://github.com/hackbuild/buck-announcer).
+
 [docs/PROTOCOL.md](docs/PROTOCOL.md) has every address, payload, status value, and limit, with examples for curl, mosquitto, Python, JavaScript, and raw CLASP frames.
 
 ## Build your own

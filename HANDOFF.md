@@ -16,6 +16,7 @@ Read `RULES.md` first. It is absolute and wins over this file.
 | CLASP door | `wss://relay.clasp.to`, open, no MQTT (DigitalOcean App Platform behind Cloudflare) |
 | MQTT door | `relay.clasp.chat:1883`, open; its CLASP WebSocket side needs a token |
 | curl | `curl -d "hello" mqtt://relay.clasp.chat/hackbuild/buck/heatsync/say` |
+| calendar announcements | https://github.com/hackbuild/buck-announcer, a Cloudflare Worker that sends lines to this head over CLASP |
 
 ## where it stands, 2026-10-07
 
